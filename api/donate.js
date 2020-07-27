@@ -152,8 +152,11 @@ const sendTextMessage = async (messageText, phoneNumber) => {
 }
 
 module.exports = async (req, res) => {
+  console.log('-----HELLO-----');
   // because these are being sent as query params right now, paymentMethods can be an array or a string;
   const { name = '', paymentMethods, amount, phoneNumber } = req.query;
+
+  console.log('----------', { PAYLOAD: req.payload }, '----------');
 
   // check data 
   if (!paymentMethods || !amount || !phoneNumber) {
