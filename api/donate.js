@@ -155,13 +155,11 @@ module.exports = async (req, res) => {
   // because these are being sent as query params right now, paymentMethods can be an array or a string;
   const { name = '', paymentMethods, amount, phoneNumber } = req.query;
 
-  const { tableId, recordId, updates } = req.body;
-
   console.log('---body---', req.body, '---end body---');
 
-  console.log({ tableId });
-  console.log({ recordId });
-  console.log({ updates });
+  console.log({ tableId: req.body.tableId });
+  console.log({ recordId: req.body.recordId });
+  console.log({ updates: req.body.updates });
 
   // only do updates on donation table
   if (tableId !== 'tblfOAdqggNZFxLJ0') {
