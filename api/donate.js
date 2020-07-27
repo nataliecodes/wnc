@@ -1,6 +1,9 @@
 const Airtable = require('airtable');
-
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base('appwQnQN4iYL4GvTQ');
+
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const client = require('twilio')(accountSid, authToken);
 
 const getAllRequests = async (paymentMethods) => {
   try {
@@ -135,6 +138,19 @@ const getMessageText = async (paymentMethod, request, name, amount) => {
   }
 }
 
+const sendTextMessage = async (messageText, phoneNumber) => {
+  try {
+    return client.messages.create({
+      from: process.env.TWILIO_PHONE_NUMBER,
+      body: messageText,
+      to: phoneNumber
+    });
+  } catch (e) {
+    console.error(e);
+    return e;
+  }
+}
+
 module.exports = async (req, res) => {
   // because these are being sent as query params right now, paymentMethods can be an array or a string;
   const { name = '', paymentMethods, amount, phoneNumber } = req.query;
@@ -173,7 +189,14 @@ module.exports = async (req, res) => {
   // get text to send via twilio
   const messageText = await getMessageText(paymentMethod, request, name, amount);
 
-  console.log({ messageText });
+  // send message via Twilio
+  const messageStatus = await sendTextMessage(messageText, phoneNumber);
+
+  // if no error, update airtable
+  if (!messageStatus.errorMessage) {
+    // update airtable
+    console.log('success!')
+  }
 
   res.status(200).send(`Hello ${name}! Payment Methods: ${paymentMethods}, Amount: ${amount}, Phone: ${phoneNumber}`);
 }
