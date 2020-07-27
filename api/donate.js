@@ -157,6 +157,8 @@ module.exports = async (req, res) => {
 
   const { tableId, recordId, updates } = req.body;
 
+  console.log('---body---', req.body, '---end body---');
+
   console.log({ tableId });
   console.log({ recordId });
   console.log({ updates });
