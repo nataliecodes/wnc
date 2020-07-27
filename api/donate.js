@@ -190,13 +190,13 @@ module.exports = async (req, res) => {
   const messageText = await getMessageText(paymentMethod, request, name, amount);
 
   // send message via Twilio
-  const messageStatus = await sendTextMessage(messageText, phoneNumber);
+  const messageResponse = await sendTextMessage(messageText, phoneNumber);
 
   // if no error, update airtable
-  if (!messageStatus.errorMessage) {
+  if (!messageResponse.errorMessage) {
     // update airtable
     console.log('success!')
   }
 
-  res.status(200).send(`Hello ${name}! Payment Methods: ${paymentMethods}, Amount: ${amount}, Phone: ${phoneNumber}`);
+  res.status(200).send(`Hello ${name}! message success id number: ${messageResponse.sid}`);
 }
