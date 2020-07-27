@@ -30,20 +30,62 @@ const getAllRequests = async (paymentMethods) => {
   }
 };
 
-// // Add cumulative weight by treatment
-// const treatmentsWithCumulativeWeight = treatments.reduce((accum, variant, idx) => {
-//   if (idx === 0) {
-//     return [{ ...variant, cumulativeWeight: variant.weight }];
-//   }
-//   const cumulativeWeight = accum[idx - 1].cumulativeWeight + variant.weight;
-//   return [...accum, { ...variant, cumulativeWeight }];
-// }, []);
+const getTotalRequestAmount = async (requests) => {
+  try {
+    let totalRequestsAmount = 0;
 
-// // Assign treatment based on random number and weight
-// const randomNum = Math.random();
-// const treatment = treatmentsWithCumulativeWeight.find((option) => {
-//   return randomNum <= option.cumulativeWeight;
-// });
+    requests.forEach(request => {
+      const requestAmount = request.get('Request Amount');
+
+      totalRequestsAmount += requestAmount;
+    });
+
+    return totalRequestsAmount;
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+const getTreatments = async (requests, totalRequestsAmount) => {
+  try {
+    const treatments = [];
+
+    requests.forEach(request => {
+      const amountLeft = request.get('Amount To Raise');
+      // IMPORTANT: total weight must = 1, which is why we're leaving these as decimals < 1
+      const weight = amountLeft / totalRequestsAmount;
+
+      treatments.push({ value: request.id, weight, request });
+    });
+
+    return treatments;
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+const getTreatmentBasedOnWeight = async (treatments) => {
+  try {
+    // Add cumulative weight by treatment
+    const treatmentsWithCumulativeWeight = treatments.reduce((accum, variant, idx) => {
+      if (idx === 0) {
+        return [{ ...variant, cumulativeWeight: variant.weight }];
+      }
+      const cumulativeWeight = accum[idx - 1].cumulativeWeight + variant.weight;
+      return [...accum, { ...variant, cumulativeWeight }];
+    }, []);
+
+    // Assign treatment based on random number and weight
+    const randomNum = Math.random();
+    const treatment = treatmentsWithCumulativeWeight.find((option) => {
+      return randomNum <= option.cumulativeWeight;
+    });
+
+    return treatment;
+  } catch (e) {
+    console.error(e);
+  }
+}
 
 module.exports = async (req, res) => {
   const { name = '', paymentMethods, amount, phoneNumber } = req.query;
@@ -56,14 +98,17 @@ module.exports = async (req, res) => {
   // get requests from the table
   const requests = await getAllRequests(paymentMethods);
 
-  // get percentage of all money left for each request
-  let totalRequestsAmount = 0;
+  // get total money to be spent
+  const totalRequestsAmount = await getTotalRequestAmount(requests);
 
-  requests.forEach(request => {
-    const requestAmount = request.get('Request Amount');
+  // get an array of each ID with weight based on how much money they have left to donate
+  const treatments = await getTreatments(requests, totalRequestsAmount);
 
-    totalRequestsAmount += requestAmount;
-  });
+  // get random treatment based on weight
+  const treatment = await getTreatmentBasedOnWeight(treatments);
+
+  // get request off of that treatment
+  const { request } = treatment;
 
   res.status(200).send(`Hello ${name}! Payment Methods: ${paymentMethods}, Amount: ${amount}, Phone: ${phoneNumber}`);
 }
