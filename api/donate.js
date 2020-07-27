@@ -87,7 +87,34 @@ const getTreatmentBasedOnWeight = async (treatments) => {
   }
 }
 
+const getPaymentMethod = async (request, paymentMethods) => {
+  try {
+    const requestorMethods = request.get('Payment Method');
+
+    let paymentMethod = '';
+
+    for (let i = 0; i < requestorMethods.length; i++) {
+      const method = requestorMethods[i];
+
+      if (Array.isArray(paymentMethods)) {
+        if (paymentMethods.indexOf(method) > -1) {
+          paymentMethod = method;
+          break;
+        }
+      } else if (method === paymentMethods) {
+        paymentMethod = method;
+        break;
+      }
+    }
+
+    return paymentMethod;
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 module.exports = async (req, res) => {
+  // because these are being sent as query params right now, paymentMethods can be an array or a string;
   const { name = '', paymentMethods, amount, phoneNumber } = req.query;
 
   // check data 
@@ -97,6 +124,14 @@ module.exports = async (req, res) => {
 
   // get requests from the table
   const requests = await getAllRequests(paymentMethods);
+
+  // ERROR / EDGE CASE HANDLING
+  // if no requests come back, aka no one who needs money currently aligns with your payment method, OR all donation requests have been met (WOO!)
+  if (requests.length === 0) {
+    // send text that either no one matches the payment option you provided or all donations have been met
+    res.status(200).send('Payment methods do not match or all donations have been met');
+    return;
+  }
 
   // get total money to be spent
   const totalRequestsAmount = await getTotalRequestAmount(requests);
@@ -109,6 +144,11 @@ module.exports = async (req, res) => {
 
   // get request off of that treatment
   const { request } = treatment;
+
+  // get payment method(s) from request
+  const paymentMethod = await getPaymentMethod(request, paymentMethods);
+
+  console.log({ paymentMethod });
 
   res.status(200).send(`Hello ${name}! Payment Methods: ${paymentMethods}, Amount: ${amount}, Phone: ${phoneNumber}`);
 }
