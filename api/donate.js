@@ -113,6 +113,28 @@ const getPaymentMethod = async (request, paymentMethods) => {
   }
 }
 
+const getMessageText = async (paymentMethod, request, name, amount) => {
+  try {
+    let contact = '';
+
+    if (paymentMethod === 'CashApp') {
+      contact = request.get('CashApp username');
+    } else if (paymentMethod === 'Zelle') {
+      contact = request.get('Zelle Email or Phone Number');
+    } else if (paymentMethod === 'Paypal') {
+      contact = request.get('PayPal Email or Phone Number');
+    } else if (paymentMethod === 'Venmo') {
+      contact = request.get('Venmo username');
+    }
+
+    const textMessage = `Hi ${name}! Thank you for your contribution. Please send $${amount} to ${contact}.`;
+
+    return textMessage;
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 module.exports = async (req, res) => {
   // because these are being sent as query params right now, paymentMethods can be an array or a string;
   const { name = '', paymentMethods, amount, phoneNumber } = req.query;
@@ -148,7 +170,10 @@ module.exports = async (req, res) => {
   // get payment method(s) from request
   const paymentMethod = await getPaymentMethod(request, paymentMethods);
 
-  console.log({ paymentMethod });
+  // get text to send via twilio
+  const messageText = await getMessageText(paymentMethod, request, name, amount);
+
+  console.log({ messageText });
 
   res.status(200).send(`Hello ${name}! Payment Methods: ${paymentMethods}, Amount: ${amount}, Phone: ${phoneNumber}`);
 }
