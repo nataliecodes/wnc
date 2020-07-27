@@ -156,10 +156,11 @@ module.exports = async (req, res) => {
   const { name = '', paymentMethods, amount, phoneNumber } = req.query;
 
   console.log('---body---', req.body, '---end body---');
+  const data = req.body[0];
 
-  console.log({ tableId: req.body.tableId });
-  console.log({ recordId: req.body.recordId });
-  console.log({ updates: req.body.updates });
+  console.log({ tableId: data.tableId });
+  console.log({ recordId: data.recordId });
+  console.log({ updates: data.updates });
 
   // only do updates on donation table
   if (tableId !== 'tblfOAdqggNZFxLJ0') {
