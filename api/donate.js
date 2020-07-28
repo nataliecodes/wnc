@@ -5,6 +5,47 @@ const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = require('twilio')(accountSid, authToken);
 
+const cleanUpIncomingData = async (body) => {
+  try {
+    const { tableId, updates } = body[0].data;
+
+    // only do updates on donation table
+    if (tableId !== process.env.AIRTABLE_REQUESTS_TABLE_ID) {
+      return {};
+    }
+
+    // check data 
+    let amount = 0;
+    let name = '';
+    let paymentMethods = [];
+    let phoneNumber = '';
+
+    updates.forEach(({ field, newValue }) => {
+      if (field === 'Name') {
+        name = newValue;
+      }
+      if (field === 'Payment methods') {
+        paymentMethods = newValue.split(', ');
+      }
+      if (field === 'Phone') {
+        if (newValue.substring(0, 5) === '<tel:') {
+          phoneNumber = newValue.substring(5, 18);
+        } else {
+          phoneNumber = newValue;
+        }
+      }
+      if (field === 'Contribution') {
+        amount = newValue;
+      }
+    });
+
+    return { amount, name, paymentMethods, phoneNumber };
+  } catch (e) {
+    console.error(e);
+    return e;
+  }
+}
+
 const getAllRequests = async (paymentMethods) => {
   try {
     let paymentFilter = 'OR(';
@@ -25,7 +66,7 @@ const getAllRequests = async (paymentMethods) => {
       filterByFormula: paymentFilter,
     };
 
-    const results = await base('Requests').select(filter).all();
+    const results = await base(process.env.AIRTABLE_REQUESTS_TABLE).select(filter).all();
 
     return results;
   } catch (e) {
@@ -99,12 +140,7 @@ const getPaymentMethod = async (request, paymentMethods) => {
     for (let i = 0; i < requestorMethods.length; i++) {
       const method = requestorMethods[i];
 
-      if (Array.isArray(paymentMethods)) {
-        if (paymentMethods.indexOf(method) > -1) {
-          paymentMethod = method;
-          break;
-        }
-      } else if (method === paymentMethods) {
+      if (paymentMethods.indexOf(method) > -1) {
         paymentMethod = method;
         break;
       }
@@ -152,31 +188,21 @@ const sendTextMessage = async (messageText, phoneNumber) => {
 }
 
 module.exports = async (req, res) => {
-  // because these are being sent as query params right now, paymentMethods can be an array or a string;
-  const { name = '', paymentMethods, amount, phoneNumber } = req.query;
+  // get all the 
+  const { amount, name, paymentMethods, phoneNumber } = cleanUpIncomingData(req.body);
 
-  console.log('---body---', req.body, '---end body---');
-  const data = req.body[0];
-
-  console.log({ tableId: data.tableId });
-  console.log({ recordId: data.recordId });
-  console.log({ updates: data.updates });
-
-  // only do updates on donation table
-  if (tableId !== 'tblfOAdqggNZFxLJ0') {
+  // if it's not the right table or fields are missing, return 
+  if (!amount || !name || !paymentMethods || !phoneNumber) {
+    res.status(200).send('One or more fields is missing or the wrong table is being updated');
     return;
-  }
-
-  // check data 
-  if (!paymentMethods || !amount || !phoneNumber) {
-    // error
   }
 
   // get requests from the table
   const requests = await getAllRequests(paymentMethods);
 
   // ERROR / EDGE CASE HANDLING
-  // if no requests come back, aka no one who needs money currently aligns with your payment method, OR all donation requests have been met (WOO!)
+  // if no requests come back, aka no one who needs money currently aligns with your payment method,
+  // OR all donation requests have been met (WOO!)
   if (requests.length === 0) {
     // send text that either no one matches the payment option you provided or all donations have been met
     res.status(200).send('Payment methods do not match or all donations have been met');
