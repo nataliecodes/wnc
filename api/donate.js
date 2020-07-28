@@ -7,9 +7,13 @@ const client = require('twilio')(accountSid, authToken);
 
 const cleanUpIncomingData = async (body) => {
   try {
+    console.log({ maybeId1: body })
+    console.log({ maybeId2: body[0] })
+    console.log({ maybeId3: body[0].data })
+
     const { tableId, updates } = body[0].data;
 
-    // only do updates on donation table
+    // only handle updates to the requests table
     if (tableId !== process.env.AIRTABLE_REQUESTS_TABLE_ID) {
       return {};
     }
@@ -20,6 +24,7 @@ const cleanUpIncomingData = async (body) => {
     let paymentMethods = [];
     let phoneNumber = '';
 
+    // TODO there is definitely a better way to do this
     updates.forEach(({ field, newValue }) => {
       if (field === 'Name') {
         name = newValue;
@@ -187,12 +192,29 @@ const sendTextMessage = async (messageText, phoneNumber) => {
   }
 }
 
+const updateAirtableRecord = async (id, donationId) => {
+  try {
+    const currentRecord = await base(process.env.AIRTABLE_REQUESTS_TABLE).find(id);
+    const currentDonors = currentRecord.get('Donors');
+
+    console.log({ currentDonors });
+
+    const updatedRecord = await base(process.env.AIRTABLE_REQUESTS_TABLE).update(id, { Donors: currentDonors.push(id) });
+    console.log({ updatedRecord });
+
+    return updatedRecord;
+  } catch (e) {
+    console.error(e);
+    return e;
+  }
+};
+
 module.exports = async (req, res) => {
   // get all the 
-  const { amount, name, paymentMethods, phoneNumber } = cleanUpIncomingData(req.body);
+  const { amount, name, paymentMethods, phoneNumber, donationId } = cleanUpIncomingData(req.body);
 
   // if it's not the right table or fields are missing, return 
-  if (!amount || !name || !paymentMethods || !phoneNumber) {
+  if (!amount || !name || !paymentMethods || !phoneNumber || donationId) {
     res.status(200).send('One or more fields is missing or the wrong table is being updated');
     return;
   }
@@ -233,7 +255,9 @@ module.exports = async (req, res) => {
   // if no error, update airtable
   if (!messageResponse.errorMessage) {
     // update airtable
-    console.log('success!')
+    console.log('success!');
+
+    const updatedRecord = await updateAirtableRecord(records[0].id, donationId)
   }
 
   res.status(200).send(`Hello ${name}! message success id number: ${messageResponse.sid}`);
