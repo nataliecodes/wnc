@@ -210,7 +210,7 @@ module.exports = async (req, res) => {
 
   // if it's not the right table or fields are missing, return 
   if (!amount || !name || !paymentMethods || !phoneNumber || !donationId) {
-    res.status(200).send('One or more fields is missing or the wrong table is being updated');
+    res.status(500).send('One or more fields is missing or the wrong table is being updated');
     return;
   }
 
@@ -222,7 +222,7 @@ module.exports = async (req, res) => {
   // OR all donation requests have been met (WOO!)
   if (requests.length === 0) {
     // send text that either no one matches the payment option you provided or all donations have been met
-    res.status(200).send('Payment methods do not match or all donations have been met');
+    res.status(500).send('Payment methods do not match or all donations have been met');
     return;
   }
 
