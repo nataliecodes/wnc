@@ -7,13 +7,7 @@ const client = require('twilio')(accountSid, authToken);
 
 const cleanUpIncomingData = async (body) => {
   try {
-    console.log('-----------')
-    console.log({ body });
-    console.log({ body0: body[0] });
-    console.log({ body0data: body[0].data });
-    console.log('-----------')
-
-    const { tableId, updates, recordId } = body[0].data;
+    const { tableId, updates, recordId } = body[0];
 
     // only handle updates to the requests table
     if (tableId !== process.env.AIRTABLE_REQUESTS_TABLE_ID) {
