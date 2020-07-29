@@ -158,35 +158,46 @@ const getPaymentMethod = async (request, paymentMethods) => {
   }
 }
 
-const getMessageText = async (paymentMethod, request, name, amount) => {
+const getPaymentUrl = async (paymentMethod, request, name, amount) => {
   try {
-    let contact = '';
+    let url = '';
 
     if (paymentMethod === 'CashApp') {
-      contact = request.get('CashApp username');
+      // format is entire cashapp URL
+      url = request.get('CashApp username');
     } else if (paymentMethod === 'Zelle') {
-      contact = request.get('Zelle Email or Phone Number');
+      // format is just a phone number or email
+      const emailOrPhone = request.get('Zelle Email or Phone Number');
+      url = `${emailOrPhone} on https://www.zellepay.com/`;
     } else if (paymentMethod === 'Paypal') {
-      contact = request.get('PayPal Email or Phone Number');
+      // format is just a phone number or email
+      const emailOrPhone = request.get('PayPal Email or Phone Number')
+      url = `${emailOrPhone} on https://www.paypal.com/myaccount/transfer/homepage/pay`;
     } else if (paymentMethod === 'Venmo') {
-      contact = request.get('Venmo username');
+      // format is entire venmo URL
+      url = request.get('Venmo username');
     }
 
-    const textMessage = `Hi ${name}! Thank you for your contribution. Please send ${amount} to ${contact}.`;
-
-    return textMessage;
+    return url;
   } catch (e) {
     console.error(e);
   }
 }
 
-const sendTextMessage = async (messageText, phoneNumber) => {
+const sendTextMessage = async (phoneNumber, name, amount, platformUrl) => {
   try {
-    return client.messages.create({
-      from: process.env.TWILIO_PHONE_NUMBER,
-      body: messageText,
-      to: phoneNumber
-    });
+    return client.studio.v1.flows(process.env.TWILIO_FLOW_ID)
+      .executions
+      .create({
+        parameters: {
+          name,
+          amount,
+          platformUrl,
+        }, to: phoneNumber, from: process.env.TWILIO_PHONE_NUMBER
+      })
+      .then(execution => {
+        return execution.sid;
+      });
   } catch (e) {
     console.error(e);
     return e;
@@ -257,10 +268,12 @@ module.exports = async (req, res) => {
   const paymentMethod = await getPaymentMethod(request, paymentMethods);
 
   // get text to send via twilio
-  const messageText = await getMessageText(paymentMethod, request, name, amount);
+  const paymentUrl = await getPaymentUrl(paymentMethod, request, name, amount);
+
+  console.log({ paymentUrl });
 
   // send message via Twilio
-  const messageResponse = await sendTextMessage(messageText, phoneNumber);
+  const messageResponse = await sendTextMessage(phoneNumber, name, amount, paymentUrl);
 
   // if no error, update airtable
   if (!messageResponse.errorMessage) {
