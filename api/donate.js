@@ -172,7 +172,7 @@ const getMessageText = async (paymentMethod, request, name, amount) => {
       contact = request.get('Venmo username');
     }
 
-    const textMessage = `Hi ${name}! Thank you for your contribution. Please send $${amount} to ${contact}.`;
+    const textMessage = `Hi ${name}! Thank you for your contribution. Please send ${amount} to ${contact}.`;
 
     return textMessage;
   } catch (e) {
