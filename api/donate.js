@@ -270,10 +270,14 @@ module.exports = async (req, res) => {
   // get text to send via twilio
   const paymentUrl = await getPaymentUrl(paymentMethod, request, name, amount);
 
+  console.log('payment URL/text');
   console.log({ paymentUrl });
 
   // send message via Twilio
   const messageResponse = await sendTextMessage(phoneNumber, name, amount, paymentUrl);
+
+  console.log('respone from starting flow in twilio');
+  console.log({ messageResponse });
 
   // if no error, update airtable
   if (!messageResponse.errorMessage) {
