@@ -7,9 +7,9 @@ const client = require('twilio')(accountSid, authToken);
 
 const cleanUpIncomingData = async (body) => {
   try {
-    const { tableId, updates } = body[0].data;
+    const { tableId, updates, recordId } = body[0].data;
 
-    // only do updates on donation table
+    // only handle updates to the requests table
     if (tableId !== process.env.AIRTABLE_REQUESTS_TABLE_ID) {
       return {};
     }
@@ -20,6 +20,7 @@ const cleanUpIncomingData = async (body) => {
     let paymentMethods = [];
     let phoneNumber = '';
 
+    // TODO there is definitely a better way to do this
     updates.forEach(({ field, newValue }) => {
       if (field === 'Name') {
         name = newValue;
@@ -39,7 +40,7 @@ const cleanUpIncomingData = async (body) => {
       }
     });
 
-    return { amount, name, paymentMethods, phoneNumber };
+    return { amount, name, paymentMethods, phoneNumber, donationId: recordId };
   } catch (e) {
     console.error(e);
     return e;
@@ -187,13 +188,29 @@ const sendTextMessage = async (messageText, phoneNumber) => {
   }
 }
 
+const updateAirtableRecord = async (id, donationId) => {
+  try {
+    const currentRecord = await base(process.env.AIRTABLE_REQUESTS_TABLE).find(id);
+    const donors = await currentRecord.get('Donors') || [];
+
+    donors.push(donationId);
+
+    const updatedRecord = await base(process.env.AIRTABLE_REQUESTS_TABLE).update(id, { Donors: donors });
+
+    return updatedRecord;
+  } catch (e) {
+    console.error(e);
+    return e;
+  }
+};
+
 module.exports = async (req, res) => {
-  // get all the 
-  const { amount, name, paymentMethods, phoneNumber } = cleanUpIncomingData(req.body);
+  // get all the data off the request in the format we want
+  const { amount, name, paymentMethods, phoneNumber, donationId } = await cleanUpIncomingData(req.body);
 
   // if it's not the right table or fields are missing, return 
-  if (!amount || !name || !paymentMethods || !phoneNumber) {
-    res.status(200).send('One or more fields is missing or the wrong table is being updated');
+  if (!amount || !name || !paymentMethods || !phoneNumber || !donationId) {
+    res.status(500).send('One or more fields is missing or the wrong table is being updated');
     return;
   }
 
@@ -205,7 +222,7 @@ module.exports = async (req, res) => {
   // OR all donation requests have been met (WOO!)
   if (requests.length === 0) {
     // send text that either no one matches the payment option you provided or all donations have been met
-    res.status(200).send('Payment methods do not match or all donations have been met');
+    res.status(500).send('Payment methods do not match or all donations have been met');
     return;
   }
 
@@ -233,8 +250,13 @@ module.exports = async (req, res) => {
   // if no error, update airtable
   if (!messageResponse.errorMessage) {
     // update airtable
-    console.log('success!')
-  }
+    console.log('success sending twilio!');
 
-  res.status(200).send(`Hello ${name}! message success id number: ${messageResponse.sid}`);
+    const updatedRecord = await updateAirtableRecord(request.id, donationId);
+    const name = updatedRecord.get('Name');
+
+    res.status(200).send(`Success! Message success id number: ${messageResponse.sid}. Record updated: ${request.id}, name: ${name}`);
+  } else {
+    res.status(500).send('There was an error sending the text via Twilio. Check twilio logs.');
+  }
 }
