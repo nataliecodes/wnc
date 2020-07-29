@@ -7,16 +7,15 @@ const client = require('twilio')(accountSid, authToken);
 
 const cleanUpIncomingData = async (body) => {
   try {
-    console.log('----------')
-    console.log({ body })
-    console.log({ body0: body[0] })
-    console.log({ body0data: body[0].data })
-    console.log('----------')
-
     const { tableId, updates, recordId } = body[0];
+
+    console.log('request body')
+    console.log({ tableId }, { updates }, { recordId });
 
     // only handle updates to the requests table
     if (tableId !== process.env.AIRTABLE_REQUESTS_TABLE_ID) {
+      console.log('ids do not match');
+      console.log({ AIRTABLE_REQUESTS_TABLE_ID: process.env.AIRTABLE_REQUESTS_TABLE_ID });
       return {};
     }
 
@@ -216,12 +215,22 @@ module.exports = async (req, res) => {
 
   // if it's not the right table or fields are missing, return 
   if (!amount || !name || !paymentMethods || !phoneNumber || !donationId) {
+    console.log('error state: all calculated inputs');
+    console.log({ amount });
+    console.log({ name });
+    console.log({ paymentMethods });
+    console.log({ phoneNumber });
+    console.log({ donationId });
+
     res.status(500).send('One or more fields is missing or the wrong table is being updated');
     return;
   }
 
   // get requests from the table
   const requests = await getAllRequests(paymentMethods);
+
+  console.log('filtered requests');
+  console.log({ requests });
 
   // ERROR / EDGE CASE HANDLING
   // if no requests come back, aka no one who needs money currently aligns with your payment method,
