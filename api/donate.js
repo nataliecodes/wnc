@@ -9,9 +9,6 @@ const cleanUpIncomingData = async (body) => {
   try {
     const { tableId, updates, recordId } = body[0];
 
-    console.log('request body')
-    console.log({ tableId }, { updates }, { recordId });
-
     // only handle updates to the requests table
     if (tableId !== process.env.AIRTABLE_REQUESTS_TABLE_ID) {
       console.log('ids do not match');
@@ -240,9 +237,6 @@ module.exports = async (req, res) => {
   // get requests from the table
   const requests = await getAllRequests(paymentMethods);
 
-  console.log('filtered requests');
-  console.log({ requests });
-
   // ERROR / EDGE CASE HANDLING
   // if no requests come back, aka no one who needs money currently aligns with your payment method,
   // OR all donation requests have been met (WOO!)
@@ -270,14 +264,8 @@ module.exports = async (req, res) => {
   // get text to send via twilio
   const paymentUrl = await getPaymentUrl(paymentMethod, request, name, amount);
 
-  console.log('payment URL/text');
-  console.log({ paymentUrl });
-
   // send message via Twilio
   const messageResponse = await sendTextMessage(phoneNumber, name, amount, paymentUrl);
-
-  console.log('respone from starting flow in twilio');
-  console.log({ messageResponse });
 
   // if no error, update airtable
   if (!messageResponse.errorMessage) {
