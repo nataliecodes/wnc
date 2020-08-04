@@ -35,6 +35,10 @@ type Treatment = {
 
 const cleanUpIncomingData = async (body: MessageBody): Promise<MessageData> => {
   try {
+    console.log({ body })
+    console.log({ body0: body[0] });
+    console.log({ body1: body[1] });
+
     const { tableId, updates, recordId } = body[0];
 
     // only handle updates to the requests table
