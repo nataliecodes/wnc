@@ -9,7 +9,7 @@ type MessageBody = {
   recordId: string,
   tableId: string,
   updates: any[],
-};
+}[];
 
 type MessageData = {
   amount: number,
@@ -33,48 +33,51 @@ type Treatment = {
   request: RequestRecord,
 };
 
-const cleanUpIncomingData = async (body: MessageBody): Promise<MessageData> => {
+const cleanUpIncomingData = async (body: MessageBody): Promise<MessageData[]> => {
   try {
-    console.log({ body })
-    console.log({ body0: body[0] });
-    console.log({ body1: body[1] });
+    const recordUpdates = [];
 
-    const { tableId, updates, recordId } = body[0];
+    body.forEach(update => {
+      const { tableId, updates, recordId } = update;
 
-    // only handle updates to the requests table
-    if (tableId !== process.env.AIRTABLE_REQUESTS_TABLE_ID) {
-      console.log('ids do not match');
-      console.log({ AIRTABLE_REQUESTS_TABLE_ID: process.env.AIRTABLE_REQUESTS_TABLE_ID });
-      return {} as MessageData;
-    }
-
-    // check data 
-    let amount = 0;
-    let name = '';
-    let paymentMethods = [];
-    let phoneNumber = '';
-
-    // TODO there is definitely a better way to do this
-    updates.forEach(({ field, newValue }) => {
-      if (field === 'Name') {
-        name = newValue;
+      // only handle updates to the requests table
+      if (tableId !== process.env.AIRTABLE_REQUESTS_TABLE_ID) {
+        console.log('ids do not match');
+        console.log({ AIRTABLE_REQUESTS_TABLE_ID: process.env.AIRTABLE_REQUESTS_TABLE_ID });
+        return;
       }
-      if (field === 'Payment methods') {
-        paymentMethods = newValue.split(', ');
-      }
-      if (field === 'Phone') {
-        if (newValue.substring(0, 5) === '<tel:') {
-          phoneNumber = newValue.substring(5, 18);
-        } else {
-          phoneNumber = newValue;
+
+      // check data 
+      let amount = 0;
+      let name = '';
+      let paymentMethods = [];
+      let phoneNumber = '';
+
+      // TODO there is definitely a better way to do this
+      updates.forEach(({ field, newValue }) => {
+        if (field === 'Name') {
+          name = newValue;
         }
-      }
-      if (field === 'Contribution') {
-        amount = newValue;
-      }
+        if (field === 'Payment methods') {
+          paymentMethods = newValue.split(', ');
+        }
+        if (field === 'Phone') {
+          if (newValue.substring(0, 5) === '<tel:') {
+            phoneNumber = newValue.substring(5, 18);
+          } else {
+            phoneNumber = newValue;
+          }
+        }
+        if (field === 'Contribution') {
+          amount = newValue;
+        }
+      });
+
+      recordUpdates.push({ amount, name, paymentMethods, phoneNumber, donationId: recordId });
     });
 
-    return { amount, name, paymentMethods, phoneNumber, donationId: recordId };
+
+    return recordUpdates;
   } catch (e) {
     console.error(e);
     return e;
@@ -243,9 +246,8 @@ const updateAirtableRecord = async (id: string, donationId: string): Promise<Req
   }
 };
 
-module.exports = async (req, res) => {
-  // get all the data off the request in the format we want
-  const { amount, name, paymentMethods, phoneNumber, donationId } = await cleanUpIncomingData(req.body);
+const matchDonorAndSendText = async (donationRequest, res) => {
+  const { amount, name, paymentMethods, phoneNumber, donationId } = donationRequest;
 
   // if it's not the right table or fields are missing, return 
   if (!amount || !name || !paymentMethods || !phoneNumber || !donationId) {
@@ -306,4 +308,13 @@ module.exports = async (req, res) => {
   } else {
     res.status(500).send('There was an error sending the text via Twilio. Check twilio logs.');
   }
+}
+
+module.exports = async (req, res) => {
+  // get all the data off the request in the format we want
+  const donationRequests = await cleanUpIncomingData(req.body);
+
+  donationRequests.forEach(async donationRequest => {
+    await matchDonorAndSendText(donationRequest, res);
+  });
 }
