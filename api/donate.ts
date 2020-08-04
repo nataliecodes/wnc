@@ -1,11 +1,39 @@
-const Airtable = require('airtable');
-const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base('appwQnQN4iYL4GvTQ');
+const AirtableClass = require('airtable');
+const base = new AirtableClass({ apiKey: process.env.AIRTABLE_API_KEY }).base('appwQnQN4iYL4GvTQ');
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = require('twilio')(accountSid, authToken);
 
-const cleanUpIncomingData = async (body) => {
+type MessageBody = {
+  recordId: string,
+  tableId: string,
+  updates: any[],
+};
+
+type MessageData = {
+  amount: number,
+  name: string,
+  paymentMethods: PaymentMethod[],
+  phoneNumber: string,
+  donationId: string,
+};
+
+type PaymentMethod = 'CashApp' | 'Venmo' | 'Paypal' | 'Zelle';
+
+type RequestRecord = {
+  id: string,
+  fields: {},
+  get: (property: string) => any;
+};
+
+type Treatment = {
+  value: string,
+  weight: string,
+  request: RequestRecord,
+};
+
+const cleanUpIncomingData = async (body: MessageBody): Promise<MessageData> => {
   try {
     const { tableId, updates, recordId } = body[0];
 
@@ -13,7 +41,7 @@ const cleanUpIncomingData = async (body) => {
     if (tableId !== process.env.AIRTABLE_REQUESTS_TABLE_ID) {
       console.log('ids do not match');
       console.log({ AIRTABLE_REQUESTS_TABLE_ID: process.env.AIRTABLE_REQUESTS_TABLE_ID });
-      return {};
+      return {} as MessageData;
     }
 
     // check data 
@@ -49,21 +77,17 @@ const cleanUpIncomingData = async (body) => {
   }
 }
 
-const getAllRequests = async (paymentMethods) => {
+const getAllRequests = async (paymentMethods: PaymentMethod[]): Promise<RequestRecord[]> => {
   try {
-    let paymentFilter = 'OR(';
+    let paymentFilter = 'OR({Status}!="Funded", ';
 
-    if (Array.isArray(paymentMethods)) {
-      paymentMethods.forEach((method, index) => {
-        if (index === paymentMethods.length - 1) {
-          paymentFilter += `{Payment Method}='${method}')`;
-        } else {
-          paymentFilter += `{Payment Method}='${method}', `;
-        }
-      });
-    } else {
-      paymentFilter = `{Payment Method}='${paymentMethods}'`;
-    }
+    paymentMethods.forEach((method, index) => {
+      if (index === paymentMethods.length - 1) {
+        paymentFilter += `{Payment Method}='${method}')`;
+      } else {
+        paymentFilter += `{Payment Method}='${method}', `;
+      }
+    });
 
     const filter = {
       filterByFormula: paymentFilter,
@@ -77,14 +101,14 @@ const getAllRequests = async (paymentMethods) => {
   }
 };
 
-const getTotalRequestAmount = async (requests) => {
+const getTotalRequestAmount = async (requests: RequestRecord[]): Promise<number> => {
   try {
     let totalRequestsAmount = 0;
 
     requests.forEach(request => {
       const requestAmount = request.get('Request Amount');
 
-      totalRequestsAmount += requestAmount;
+      totalRequestsAmount += parseInt(requestAmount);
     });
 
     return totalRequestsAmount;
@@ -93,12 +117,12 @@ const getTotalRequestAmount = async (requests) => {
   }
 }
 
-const getTreatments = async (requests, totalRequestsAmount) => {
+const getTreatments = async (requests: RequestRecord[], totalRequestsAmount: number): Promise<Treatment[]> => {
   try {
     const treatments = [];
 
     requests.forEach(request => {
-      const amountLeft = request.get('Amount To Raise');
+      const amountLeft = parseInt(request.get('Amount To Raise'));
       // IMPORTANT: total weight must = 1, which is why we're leaving these as decimals < 1
       const weight = amountLeft / totalRequestsAmount;
 
@@ -111,7 +135,7 @@ const getTreatments = async (requests, totalRequestsAmount) => {
   }
 }
 
-const getTreatmentBasedOnWeight = async (treatments) => {
+const getTreatmentBasedOnWeight = async (treatments: Treatment[]): Promise<Treatment> => {
   try {
     // Add cumulative weight by treatment
     const treatmentsWithCumulativeWeight = treatments.reduce((accum, variant, idx) => {
@@ -134,14 +158,12 @@ const getTreatmentBasedOnWeight = async (treatments) => {
   }
 }
 
-const getPaymentMethod = async (request, paymentMethods) => {
+const getPaymentMethod = async (requestPaymentMethods: PaymentMethod[], paymentMethods: PaymentMethod[]): Promise<PaymentMethod> => {
   try {
-    const requestorMethods = request.get('Payment Method');
+    let paymentMethod = '' as PaymentMethod;
 
-    let paymentMethod = '';
-
-    for (let i = 0; i < requestorMethods.length; i++) {
-      const method = requestorMethods[i];
+    for (let i = 0; i < requestPaymentMethods.length; i++) {
+      const method = requestPaymentMethods[i];
 
       if (paymentMethods.indexOf(method) > -1) {
         paymentMethod = method;
@@ -155,7 +177,7 @@ const getPaymentMethod = async (request, paymentMethods) => {
   }
 }
 
-const getPaymentUrl = async (paymentMethod, request, name, amount) => {
+const getPaymentUrl = async (paymentMethod: PaymentMethod, request: RequestRecord): Promise<string> => {
   try {
     let url = '';
 
@@ -181,7 +203,7 @@ const getPaymentUrl = async (paymentMethod, request, name, amount) => {
   }
 }
 
-const sendTextMessage = async (phoneNumber, name, amount, platformUrl) => {
+const sendTextMessage = async (phoneNumber: string, name: string, amount: number, platformUrl: string): Promise<{ errorMessage?: string, sid?: string }> => {
   try {
     return client.studio.v1.flows(process.env.TWILIO_FLOW_ID)
       .executions
@@ -201,7 +223,7 @@ const sendTextMessage = async (phoneNumber, name, amount, platformUrl) => {
   }
 }
 
-const updateAirtableRecord = async (id, donationId) => {
+const updateAirtableRecord = async (id: string, donationId: string): Promise<RequestRecord> => {
   try {
     const currentRecord = await base(process.env.AIRTABLE_REQUESTS_TABLE).find(id);
     const donors = await currentRecord.get('Donors') || [];
@@ -259,10 +281,11 @@ module.exports = async (req, res) => {
   const { request } = treatment;
 
   // get payment method(s) from request
-  const paymentMethod = await getPaymentMethod(request, paymentMethods);
+  const requestPaymentMethods = request.get('Payment Method');
+  const paymentMethod = await getPaymentMethod(requestPaymentMethods, paymentMethods);
 
   // get text to send via twilio
-  const paymentUrl = await getPaymentUrl(paymentMethod, request, name, amount);
+  const paymentUrl = await getPaymentUrl(paymentMethod, request);
 
   // send message via Twilio
   const messageResponse = await sendTextMessage(phoneNumber, name, amount, paymentUrl);
