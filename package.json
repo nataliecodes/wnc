@@ -1,6 +1,9 @@
 {
   "dependencies": {
+    "@types/airtable": "^0.8.0",
+    "@types/twilio": "^2.11.0",
     "airtable": "^0.8.1",
-    "twilio": "^3.48.1"
+    "twilio": "^3.48.1",
+    "typescript": "^3.9.7"
   }
 }
