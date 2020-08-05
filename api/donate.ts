@@ -33,7 +33,23 @@ type Treatment = {
   request: RequestRecord,
 };
 
+const sendErrorToAirtable = async (e, donorName) => {
+  console.error(e);
+
+  await base('TEST Errors').create([
+    {
+      'fields': {
+        'Error': e,
+        'Error message': e,
+        'Donor name': donorName,
+      }
+    }
+  ]);
+}
+
 const cleanUpIncomingData = async (body: MessageBody): Promise<MessageData[]> => {
+  let name = '';
+
   try {
     const recordUpdates = [];
 
@@ -49,7 +65,6 @@ const cleanUpIncomingData = async (body: MessageBody): Promise<MessageData[]> =>
 
       // check data 
       let amount = 0;
-      let name = '';
       let paymentMethods = [];
       let phoneNumber = '';
 
@@ -79,8 +94,7 @@ const cleanUpIncomingData = async (body: MessageBody): Promise<MessageData[]> =>
 
     return recordUpdates;
   } catch (e) {
-    console.error(e);
-    return e;
+    await sendErrorToAirtable(e, name);
   }
 }
 
