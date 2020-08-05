@@ -113,6 +113,10 @@ const getAllRequests = async (paymentMethods: PaymentMethod[], name: string): Pr
       }
     });
 
+    console.log('--- start paymentfilter ---');
+    console.log({ paymentFilter });
+    console.log('--- end paymentfilter ---');
+
     const filter = {
       filterByFormula: paymentFilter,
     };
