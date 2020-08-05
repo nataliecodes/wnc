@@ -36,11 +36,14 @@ type Treatment = {
 const sendErrorToAirtable = async (e, donorName) => {
   console.error(e);
 
-  await base('TEST Errors').create([
+  const errorField = (e && e.status) ? e.status.toString() : 'general error name';
+  const errorMessage = (e && e.message) ? e.message : 'general error message';
+
+  await base(process.env.AIRTABLE_ERRORS_TABLE).create([
     {
       'fields': {
-        'Error': e,
-        'Error message': e,
+        'Error': errorField,
+        'Error message': errorMessage,
         'Donor name': donorName,
       }
     }
@@ -98,7 +101,7 @@ const cleanUpIncomingData = async (body: MessageBody): Promise<MessageData[]> =>
   }
 }
 
-const getAllRequests = async (paymentMethods: PaymentMethod[]): Promise<RequestRecord[]> => {
+const getAllRequests = async (paymentMethods: PaymentMethod[], name: string): Promise<RequestRecord[]> => {
   try {
     let paymentFilter = 'OR({Status}!="Funded", ';
 
@@ -118,11 +121,11 @@ const getAllRequests = async (paymentMethods: PaymentMethod[]): Promise<RequestR
 
     return results;
   } catch (e) {
-    console.error(e);
+    sendErrorToAirtable(e, name);
   }
 };
 
-const getTotalRequestAmount = async (requests: RequestRecord[]): Promise<number> => {
+const getTotalRequestAmount = async (requests: RequestRecord[], name: string): Promise<number> => {
   try {
     let totalRequestsAmount = 0;
 
@@ -134,7 +137,7 @@ const getTotalRequestAmount = async (requests: RequestRecord[]): Promise<number>
 
     return totalRequestsAmount;
   } catch (e) {
-    console.error(e);
+    sendErrorToAirtable(e, name);
   }
 }
 
@@ -179,7 +182,7 @@ const getTreatmentBasedOnWeight = async (treatments: Treatment[]): Promise<Treat
   }
 }
 
-const getPaymentMethod = async (requestPaymentMethods: PaymentMethod[], paymentMethods: PaymentMethod[]): Promise<PaymentMethod> => {
+const getPaymentMethod = async (requestPaymentMethods: PaymentMethod[], paymentMethods: PaymentMethod[], name: string): Promise<PaymentMethod> => {
   try {
     let paymentMethod = '' as PaymentMethod;
 
@@ -194,11 +197,11 @@ const getPaymentMethod = async (requestPaymentMethods: PaymentMethod[], paymentM
 
     return paymentMethod;
   } catch (e) {
-    console.error(e);
+    sendErrorToAirtable(e, name);
   }
 }
 
-const getPaymentUrl = async (paymentMethod: PaymentMethod, request: RequestRecord): Promise<string> => {
+const getPaymentUrl = async (paymentMethod: PaymentMethod, request: RequestRecord, name: string): Promise<string> => {
   try {
     let url = '';
 
@@ -220,31 +223,11 @@ const getPaymentUrl = async (paymentMethod: PaymentMethod, request: RequestRecor
 
     return url;
   } catch (e) {
-    console.error(e);
+    sendErrorToAirtable(e, name);
   }
 }
 
-const sendTextMessage = async (phoneNumber: string, name: string, amount: number, platformUrl: string): Promise<{ errorMessage?: string, sid?: string }> => {
-  try {
-    return client.studio.v1.flows(process.env.TWILIO_FLOW_ID)
-      .executions
-      .create({
-        parameters: {
-          name,
-          amount,
-          platformUrl,
-        }, to: phoneNumber, from: process.env.TWILIO_PHONE_NUMBER
-      })
-      .then(execution => {
-        return execution.sid;
-      });
-  } catch (e) {
-    console.error(e);
-    return e;
-  }
-}
-
-const updateAirtableRecord = async (id: string, donationId: string): Promise<RequestRecord> => {
+const updateAirtableRecord = async (id: string, donationId: string, name: string): Promise<RequestRecord> => {
   try {
     const currentRecord = await base(process.env.AIRTABLE_REQUESTS_TABLE).find(id);
     const donors = await currentRecord.get('Donors') || [];
@@ -255,8 +238,7 @@ const updateAirtableRecord = async (id: string, donationId: string): Promise<Req
 
     return updatedRecord;
   } catch (e) {
-    console.error(e);
-    return e;
+    sendErrorToAirtable(e, name);
   }
 };
 
@@ -277,19 +259,20 @@ const matchDonorAndSendText = async (donationRequest, res) => {
   }
 
   // get requests from the table
-  const requests = await getAllRequests(paymentMethods);
+  const requests = await getAllRequests(paymentMethods, name);
 
   // ERROR / EDGE CASE HANDLING
   // if no requests come back, aka no one who needs money currently aligns with your payment method,
   // OR all donation requests have been met (WOO!)
   if (requests.length === 0) {
+    sendErrorToAirtable('Payment methods do not match or all donations have been met', name);
     // send text that either no one matches the payment option you provided or all donations have been met
     res.status(500).send('Payment methods do not match or all donations have been met');
     return;
   }
 
   // get total money to be spent
-  const totalRequestsAmount = await getTotalRequestAmount(requests);
+  const totalRequestsAmount = await getTotalRequestAmount(requests, name);
 
   // get an array of each ID with weight based on how much money they have left to donate
   const treatments = await getTreatments(requests, totalRequestsAmount);
@@ -302,26 +285,33 @@ const matchDonorAndSendText = async (donationRequest, res) => {
 
   // get payment method(s) from request
   const requestPaymentMethods = request.get('Payment Method');
-  const paymentMethod = await getPaymentMethod(requestPaymentMethods, paymentMethods);
+  const paymentMethod = await getPaymentMethod(requestPaymentMethods, paymentMethods, name);
 
   // get text to send via twilio
-  const paymentUrl = await getPaymentUrl(paymentMethod, request);
+  const paymentUrl = await getPaymentUrl(paymentMethod, request, name);
 
   // send message via Twilio
-  const messageResponse = await sendTextMessage(phoneNumber, name, amount, paymentUrl);
+  client.studio.v1.flows(process.env.TWILIO_FLOW_ID)
+    .executions
+    .create({
+      parameters: {
+        name,
+        amount,
+        platformUrl: paymentUrl,
+      }, to: phoneNumber, from: process.env.TWILIO_PHONE_NUMBER
+    })
+    .then(async response => {
+      console.log('success sending twilio!');
 
-  // if no error, update airtable
-  if (!messageResponse.errorMessage) {
-    // update airtable
-    console.log('success sending twilio!');
+      const updatedRecord = await updateAirtableRecord(request.id, donationId, name);
+      const nameOfUpdatedRecord = updatedRecord.get('Name');
 
-    const updatedRecord = await updateAirtableRecord(request.id, donationId);
-    const name = updatedRecord.get('Name');
-
-    res.status(200).send(`Success! Message success id number: ${messageResponse.sid}. Record updated: ${request.id}, name: ${name}`);
-  } else {
-    res.status(500).send('There was an error sending the text via Twilio. Check twilio logs.');
-  }
+      res.status(200).send(`Success! Message success id number: ${response.sid}. Record updated: ${request.id}, name: ${nameOfUpdatedRecord}`);
+    })
+    .catch(error => {
+      sendErrorToAirtable(error, name);
+      res.status(500).send(`Error sending message via Twilio. Check Twilio logs. Donor name: ${name}.`);
+    });
 }
 
 module.exports = async (req, res) => {
