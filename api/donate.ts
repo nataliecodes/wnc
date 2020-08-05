@@ -125,60 +125,13 @@ const getAllRequests = async (paymentMethods: PaymentMethod[], name: string): Pr
   }
 };
 
-const getTotalRequestAmount = async (requests: RequestRecord[], name: string): Promise<number> => {
+const getRandomRequest = async (requests: RequestRecord[], name: string): Promise<RequestRecord> => {
   try {
-    let totalRequestsAmount = 0;
+    const randomIndex = Math.floor(Math.random() * requests.length);
 
-    requests.forEach(request => {
-      const requestAmount = request.get('Request Amount');
-
-      totalRequestsAmount += parseInt(requestAmount);
-    });
-
-    return totalRequestsAmount;
+    return requests[randomIndex];
   } catch (e) {
     sendErrorToAirtable(e, name);
-  }
-}
-
-const getTreatments = async (requests: RequestRecord[], totalRequestsAmount: number): Promise<Treatment[]> => {
-  try {
-    const treatments = [];
-
-    requests.forEach(request => {
-      const amountLeft = parseInt(request.get('Amount To Raise'));
-      // IMPORTANT: total weight must = 1, which is why we're leaving these as decimals < 1
-      const weight = amountLeft / totalRequestsAmount;
-
-      treatments.push({ value: request.id, weight, request });
-    });
-
-    return treatments;
-  } catch (e) {
-    console.error(e);
-  }
-}
-
-const getTreatmentBasedOnWeight = async (treatments: Treatment[]): Promise<Treatment> => {
-  try {
-    // Add cumulative weight by treatment
-    const treatmentsWithCumulativeWeight = treatments.reduce((accum, variant, idx) => {
-      if (idx === 0) {
-        return [{ ...variant, cumulativeWeight: variant.weight }];
-      }
-      const cumulativeWeight = accum[idx - 1].cumulativeWeight + variant.weight;
-      return [...accum, { ...variant, cumulativeWeight }];
-    }, []);
-
-    // Assign treatment based on random number and weight
-    const randomNum = Math.random();
-    const treatment = treatmentsWithCumulativeWeight.find((option) => {
-      return randomNum <= option.cumulativeWeight;
-    });
-
-    return treatment;
-  } catch (e) {
-    console.error(e);
   }
 }
 
@@ -271,17 +224,12 @@ const matchDonorAndSendText = async (donationRequest, res) => {
     return;
   }
 
-  // get total money to be spent
-  const totalRequestsAmount = await getTotalRequestAmount(requests, name);
-
   // get an array of each ID with weight based on how much money they have left to donate
-  const treatments = await getTreatments(requests, totalRequestsAmount);
+  const request = await getRandomRequest(requests, name);
 
-  // get random treatment based on weight
-  const treatment = await getTreatmentBasedOnWeight(treatments);
-
-  // get request off of that treatment
-  const { request } = treatment;
+  console.log('---start matched request---');
+  console.log({ request });
+  console.log('---end matched request---');
 
   // get payment method(s) from request
   const requestPaymentMethods = request.get('Payment Method');
