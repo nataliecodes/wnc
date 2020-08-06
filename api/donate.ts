@@ -103,11 +103,11 @@ const cleanUpIncomingData = async (body: MessageBody): Promise<MessageData[]> =>
 
 const getAllRequests = async (paymentMethods: PaymentMethod[], name: string): Promise<RequestRecord[]> => {
   try {
-    let paymentFilter = 'OR({Status}!="Funded", ';
+    let paymentFilter = 'AND({Status}!="Funded", OR(';
 
     paymentMethods.forEach((method, index) => {
       if (index === paymentMethods.length - 1) {
-        paymentFilter += `{Payment Method}='${method}')`;
+        paymentFilter += `{Payment Method}='${method}'))`;
       } else {
         paymentFilter += `{Payment Method}='${method}', `;
       }
@@ -232,7 +232,7 @@ const matchDonorAndSendText = async (donationRequest, res) => {
   const request = await getRandomRequest(requests, name);
 
   console.log('---start matched request---');
-  console.log({ request });
+  console.log({ requestPayments: request.get('Payment Method') });
   console.log('---end matched request---');
 
   // get payment method(s) from request
