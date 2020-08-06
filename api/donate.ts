@@ -272,7 +272,7 @@ const matchDonorAndSendText = async (donationRequest, res) => {
     return;
   }
 
-  await finalRequests.forEach(async request => {
+  const finalSend = await finalRequests.forEach(async request => {
     // get payment method(s) from request
     const requestPaymentMethods = request.get('Payment Method');
     const paymentMethod = await getPaymentMethod(requestPaymentMethods, paymentMethods, name);
@@ -321,6 +321,10 @@ const matchDonorAndSendText = async (donationRequest, res) => {
         res.status(500).send(`Error sending message via Twilio. Check Twilio logs. Donor name: ${name}.`);
       });
   });
+
+  console.log('---start final send---');
+  console.log({ finalSend });
+  console.log('---end final send---');
 
   res.status(200).send(`Success! Message(s) sent.`);
 }
