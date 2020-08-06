@@ -129,8 +129,6 @@ const getRandomRequest = async (requests: RequestRecord[], name: string): Promis
   try {
     const randomIndex = Math.floor(Math.random() * requests.length);
 
-    console.log({ randomIndex });
-
     return requests[randomIndex];
   } catch (e) {
     sendErrorToAirtable(e, name);
@@ -270,7 +268,7 @@ const matchDonorAndSendText = async (donationRequest, res) => {
     return;
   }
 
-  finalRequests.forEach(async request => {
+  await finalRequests.forEach(async request => {
     // get payment method(s) from request
     const requestPaymentMethods = request.get('Payment Method');
     const paymentMethod = await getPaymentMethod(requestPaymentMethods, paymentMethods, name);
@@ -304,17 +302,14 @@ const matchDonorAndSendText = async (donationRequest, res) => {
       })
       .then(async response => {
         console.log('success sending twilio!');
-
-        const updatedRecord = await updateAirtableRecord(request.id, donationId, name);
-        const nameOfUpdatedRecord = updatedRecord.get('Name');
-
-        res.status(200).send(`Success! Message success id number: ${response.sid}. Record updated: ${request.id}, name: ${nameOfUpdatedRecord}`);
       })
       .catch(error => {
         sendErrorToAirtable(error, name);
         res.status(500).send(`Error sending message via Twilio. Check Twilio logs. Donor name: ${name}.`);
       });
   });
+
+  res.status(200).send(`Success! Message(s) sent.`);
 }
 
 module.exports = async (req, res) => {
