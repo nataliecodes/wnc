@@ -272,59 +272,59 @@ const matchDonorAndSendText = async (donationRequest, res) => {
     return;
   }
 
-  const finalSend = await finalRequests.forEach(async request => {
-    // get payment method(s) from request
-    const requestPaymentMethods = request.get('Payment Method');
-    const paymentMethod = await getPaymentMethod(requestPaymentMethods, paymentMethods, name);
+  try {
+    finalRequests.forEach(async request => {
+      // get payment method(s) from request
+      const requestPaymentMethods = request.get('Payment Method');
+      const paymentMethod = await getPaymentMethod(requestPaymentMethods, paymentMethods, name);
 
-    // get text to send via twilio
-    const paymentUrl = await getPaymentUrl(paymentMethod, request, name);
+      // get text to send via twilio
+      const paymentUrl = await getPaymentUrl(paymentMethod, request, name);
 
-    let requestDonationAmount = '';
-    // get amount left for that request to know if it's less than the amount donor has suggested
-    const amountLeftToRaise = request.get('Amount To Raise');
-    // get amount for the donor
-    const donationAmount = parseInt(amount.slice(1, amount.length));
+      let requestDonationAmount = '';
+      // get amount left for that request to know if it's less than the amount donor has suggested
+      const amountLeftToRaise = request.get('Amount To Raise');
+      // get amount for the donor
+      const donationAmount = parseInt(amount.slice(1, amount.length));
 
-    // get proper amount
-    if (amountLeftToRaise < donationAmount) {
-      totalDonated += amountLeftToRaise;
-      requestDonationAmount = `$${amountLeftToRaise}.00`;
-    } else {
-      requestDonationAmount = `$${donationAmount - totalDonated}.00`;
-    }
+      // get proper amount
+      if (amountLeftToRaise < donationAmount) {
+        totalDonated += amountLeftToRaise;
+        requestDonationAmount = `$${amountLeftToRaise}.00`;
+      } else {
+        requestDonationAmount = `$${donationAmount - totalDonated}.00`;
+      }
 
-    console.log('---');
-    console.log('about to send twilio');
-    console.log('---');
+      console.log('---');
+      console.log('about to send twilio');
+      console.log('---');
 
-    // send message via Twilio
-    return client.studio.v1.flows(process.env.TWILIO_FLOW_ID)
-      .executions
-      .create({
-        parameters: {
-          name,
-          amount: requestDonationAmount,
-          platformUrl: paymentUrl,
-        }, to: phoneNumber, from: process.env.TWILIO_PHONE_NUMBER
-      })
-      .then(async response => {
-        console.log('---start twilio response---');
-        console.log({ response });
-        console.log('---end twilio response---');
+      // send message via Twilio
+      return client.studio.v1.flows(process.env.TWILIO_FLOW_ID)
+        .executions
+        .create({
+          parameters: {
+            name,
+            amount: requestDonationAmount,
+            platformUrl: paymentUrl,
+          }, to: phoneNumber, from: process.env.TWILIO_PHONE_NUMBER
+        })
+        .then(async response => {
+          console.log('---start twilio response---');
+          console.log({ response });
+          console.log('---end twilio response---');
 
-        console.log('success sending twilio!');
-        const updatedRecord = await updateAirtableRecord(request.id, donationId, name);
-      })
-      .catch(error => {
-        sendErrorToAirtable(error, name);
-        res.status(500).send(`Error sending message via Twilio. Check Twilio logs. Donor name: ${name}.`);
-      });
-  });
-
-  console.log('---start final send---');
-  console.log({ finalSend });
-  console.log('---end final send---');
+          console.log('success sending twilio!');
+          const updatedRecord = await updateAirtableRecord(request.id, donationId, name);
+        })
+        .catch(error => {
+          sendErrorToAirtable(error, name);
+          res.status(500).send(`Error sending message via Twilio. Check Twilio logs. Donor name: ${name}.`);
+        });
+    });
+  } catch (e) {
+    sendErrorToAirtable(e, name);
+  }
 
   res.status(200).send(`Success! Message(s) sent.`);
 }
