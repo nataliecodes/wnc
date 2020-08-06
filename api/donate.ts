@@ -273,7 +273,7 @@ const matchDonorAndSendText = async (donationRequest, res) => {
   }
 
   try {
-    finalRequests.forEach(async request => {
+    await finalRequests.forEach(async request => {
       // get payment method(s) from request
       const requestPaymentMethods = request.get('Payment Method');
       const paymentMethod = await getPaymentMethod(requestPaymentMethods, paymentMethods, name);
@@ -316,12 +316,10 @@ const matchDonorAndSendText = async (donationRequest, res) => {
 
           console.log('success sending twilio!');
           const updatedRecord = await updateAirtableRecord(request.id, donationId, name);
-
-          res.status(200).send(`Success! Message(s) sent.`);
+          console.log(`Record updated! Name: ${updatedRecord.get('Name')}.`);
         })
         .catch(error => {
           sendErrorToAirtable(error, name);
-          res.status(500).send(`Error sending message via Twilio. Check Twilio logs. Donor name: ${name}.`);
           return;
         });
     });
