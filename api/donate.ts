@@ -316,17 +316,18 @@ const matchDonorAndSendText = async (donationRequest, res) => {
 
           console.log('success sending twilio!');
           const updatedRecord = await updateAirtableRecord(request.id, donationId, name);
+
+          res.status(200).send(`Success! Message(s) sent.`);
         })
         .catch(error => {
           sendErrorToAirtable(error, name);
           res.status(500).send(`Error sending message via Twilio. Check Twilio logs. Donor name: ${name}.`);
+          return;
         });
     });
   } catch (e) {
     sendErrorToAirtable(e, name);
   }
-
-  res.status(200).send(`Success! Message(s) sent.`);
 }
 
 module.exports = async (req, res) => {
