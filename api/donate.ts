@@ -113,10 +113,6 @@ const getAllRequests = async (paymentMethods: PaymentMethod[], name: string): Pr
       }
     });
 
-    console.log('--- start paymentfilter ---');
-    console.log({ paymentFilter });
-    console.log('--- end paymentfilter ---');
-
     const filter = {
       filterByFormula: paymentFilter,
     };
@@ -133,7 +129,44 @@ const getRandomRequest = async (requests: RequestRecord[], name: string): Promis
   try {
     const randomIndex = Math.floor(Math.random() * requests.length);
 
+    console.log({ randomIndex });
+
     return requests[randomIndex];
+  } catch (e) {
+    sendErrorToAirtable(e, name);
+  }
+}
+
+const getRequestsForAmount = async (requests: RequestRecord[], amount: string, name: string): Promise<RequestRecord[]> => {
+  try {
+    const donationAmount = parseInt(amount.slice(1, amount.length));
+    let donorAmountLeft = donationAmount;
+
+    const finalRequests = [];
+
+    while (donorAmountLeft > 0) {
+      // get a random request from the table
+      const request = await getRandomRequest(requests, name);
+
+      finalRequests.push(request);
+
+      // find the index of the chosen request
+      const foundIndex = requests.findIndex(foundRequest => foundRequest.id === request.id);
+
+      // remove it from the requests array
+      for (let i = 0; i < requests.length; i++) {
+        if (i === foundIndex) {
+          requests.splice(i, 1);
+        }
+      }
+      // check amount to see if donation amount is more than this one request needs
+      // make sure we're comparing two ints
+      const amountLeftToRaise = request.get('Amount To Raise');
+
+      donorAmountLeft -= amountLeftToRaise;
+    }
+
+    return finalRequests;
   } catch (e) {
     sendErrorToAirtable(e, name);
   }
@@ -228,42 +261,60 @@ const matchDonorAndSendText = async (donationRequest, res) => {
     return;
   }
 
-  // get an array of each ID with weight based on how much money they have left to donate
-  const request = await getRandomRequest(requests, name);
+  // get all possible requests (could be none, 1 or +);
+  const finalRequests = await getRequestsForAmount(requests, amount, name);
+  let totalDonated = 0;
 
-  console.log('---start matched request---');
-  console.log({ requestPayments: request.get('Payment Method') });
-  console.log('---end matched request---');
+  if (finalRequests.length === 0) {
+    // waiting on how we want to handle this
+    return;
+  }
 
-  // get payment method(s) from request
-  const requestPaymentMethods = request.get('Payment Method');
-  const paymentMethod = await getPaymentMethod(requestPaymentMethods, paymentMethods, name);
+  finalRequests.forEach(async request => {
+    // get payment method(s) from request
+    const requestPaymentMethods = request.get('Payment Method');
+    const paymentMethod = await getPaymentMethod(requestPaymentMethods, paymentMethods, name);
 
-  // get text to send via twilio
-  const paymentUrl = await getPaymentUrl(paymentMethod, request, name);
+    // get text to send via twilio
+    const paymentUrl = await getPaymentUrl(paymentMethod, request, name);
 
-  // send message via Twilio
-  client.studio.v1.flows(process.env.TWILIO_FLOW_ID)
-    .executions
-    .create({
-      parameters: {
-        name,
-        amount,
-        platformUrl: paymentUrl,
-      }, to: phoneNumber, from: process.env.TWILIO_PHONE_NUMBER
-    })
-    .then(async response => {
-      console.log('success sending twilio!');
+    let requestDonationAmount = '';
+    // get amount left for that request to know if it's less than the amount donor has suggested
+    const amountLeftToRaise = request.get('Amount To Raise');
+    // get amount for the donor
+    const donationAmount = parseInt(amount.slice(1, amount.length));
 
-      const updatedRecord = await updateAirtableRecord(request.id, donationId, name);
-      const nameOfUpdatedRecord = updatedRecord.get('Name');
+    // get proper amount
+    if (amountLeftToRaise < donationAmount) {
+      totalDonated += amountLeftToRaise;
+      requestDonationAmount = `$${amountLeftToRaise}.00`;
+    } else {
+      requestDonationAmount = `$${donationAmount - totalDonated}.00`;
+    }
 
-      res.status(200).send(`Success! Message success id number: ${response.sid}. Record updated: ${request.id}, name: ${nameOfUpdatedRecord}`);
-    })
-    .catch(error => {
-      sendErrorToAirtable(error, name);
-      res.status(500).send(`Error sending message via Twilio. Check Twilio logs. Donor name: ${name}.`);
-    });
+    // send message via Twilio
+    client.studio.v1.flows(process.env.TWILIO_FLOW_ID)
+      .executions
+      .create({
+        parameters: {
+          name,
+          amount: requestDonationAmount,
+          platformUrl: paymentUrl,
+        }, to: phoneNumber, from: process.env.TWILIO_PHONE_NUMBER
+      })
+      .then(async response => {
+        console.log('success sending twilio!');
+
+        const updatedRecord = await updateAirtableRecord(request.id, donationId, name);
+        const nameOfUpdatedRecord = updatedRecord.get('Name');
+
+        res.status(200).send(`Success! Message success id number: ${response.sid}. Record updated: ${request.id}, name: ${nameOfUpdatedRecord}`);
+      })
+      .catch(error => {
+        sendErrorToAirtable(error, name);
+        res.status(500).send(`Error sending message via Twilio. Check Twilio logs. Donor name: ${name}.`);
+      });
+  });
 }
 
 module.exports = async (req, res) => {
