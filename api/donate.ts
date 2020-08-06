@@ -299,7 +299,7 @@ const matchDonorAndSendText = async (donationRequest, res) => {
     console.log('---');
 
     // send message via Twilio
-    client.studio.v1.flows(process.env.TWILIO_FLOW_ID)
+    return client.studio.v1.flows(process.env.TWILIO_FLOW_ID)
       .executions
       .create({
         parameters: {
