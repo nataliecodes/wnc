@@ -263,6 +263,10 @@ const matchDonorAndSendText = async (donationRequest, res) => {
   const finalRequests = await getRequestsForAmount(requests, amount, name);
   let totalDonated = 0;
 
+  console.log('---');
+  console.log({ finalRequests });
+  console.log('---');
+
   if (finalRequests.length === 0) {
     // waiting on how we want to handle this
     return;
@@ -289,6 +293,10 @@ const matchDonorAndSendText = async (donationRequest, res) => {
     } else {
       requestDonationAmount = `$${donationAmount - totalDonated}.00`;
     }
+
+    console.log('---');
+    console.log('about to send twilio');
+    console.log('---');
 
     // send message via Twilio
     client.studio.v1.flows(process.env.TWILIO_FLOW_ID)
