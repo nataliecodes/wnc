@@ -309,7 +309,12 @@ const matchDonorAndSendText = async (donationRequest, res) => {
         }, to: phoneNumber, from: process.env.TWILIO_PHONE_NUMBER
       })
       .then(async response => {
+        console.log('---start twilio response---');
+        console.log({ response });
+        console.log('---end twilio response---');
+
         console.log('success sending twilio!');
+        const updatedRecord = await updateAirtableRecord(request.id, donationId, name);
       })
       .catch(error => {
         sendErrorToAirtable(error, name);
