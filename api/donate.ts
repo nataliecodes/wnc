@@ -129,8 +129,6 @@ const getRandomRequest = async (requests: RequestRecord[], name: string): Promis
   try {
     const randomIndex = Math.floor(Math.random() * requests.length);
 
-    console.log({ randomIndex });
-
     return requests[randomIndex];
   } catch (e) {
     sendErrorToAirtable(e, name);
@@ -270,51 +268,54 @@ const matchDonorAndSendText = async (donationRequest, res) => {
     return;
   }
 
-  finalRequests.forEach(async request => {
-    // get payment method(s) from request
-    const requestPaymentMethods = request.get('Payment Method');
-    const paymentMethod = await getPaymentMethod(requestPaymentMethods, paymentMethods, name);
+  try {
+    await finalRequests.forEach(async request => {
+      // get payment method(s) from request
+      const requestPaymentMethods = request.get('Payment Method');
+      const paymentMethod = await getPaymentMethod(requestPaymentMethods, paymentMethods, name);
 
-    // get text to send via twilio
-    const paymentUrl = await getPaymentUrl(paymentMethod, request, name);
+      // get text to send via twilio
+      const paymentUrl = await getPaymentUrl(paymentMethod, request, name);
 
-    let requestDonationAmount = '';
-    // get amount left for that request to know if it's less than the amount donor has suggested
-    const amountLeftToRaise = request.get('Amount To Raise');
-    // get amount for the donor
-    const donationAmount = parseInt(amount.slice(1, amount.length));
+      let requestDonationAmount = '';
+      // get amount left for that request to know if it's less than the amount donor has suggested
+      const amountLeftToRaise = request.get('Amount To Raise');
+      // get amount for the donor
+      const donationAmount = parseInt(amount.slice(1, amount.length));
 
-    // get proper amount
-    if (amountLeftToRaise < donationAmount) {
-      totalDonated += amountLeftToRaise;
-      requestDonationAmount = `$${amountLeftToRaise}.00`;
-    } else {
-      requestDonationAmount = `$${donationAmount - totalDonated}.00`;
-    }
+      // get proper amount
+      if (amountLeftToRaise < donationAmount) {
+        totalDonated += amountLeftToRaise;
+        requestDonationAmount = `$${amountLeftToRaise}.00`;
+      } else {
+        requestDonationAmount = `$${donationAmount - totalDonated}.00`;
+      }
 
-    // send message via Twilio
-    client.studio.v1.flows(process.env.TWILIO_FLOW_ID)
-      .executions
-      .create({
-        parameters: {
-          name,
-          amount: requestDonationAmount,
-          platformUrl: paymentUrl,
-        }, to: phoneNumber, from: process.env.TWILIO_PHONE_NUMBER
-      })
-      .then(async response => {
-        console.log('success sending twilio!');
+      // send message via Twilio
+      client.studio.v1.flows(process.env.TWILIO_FLOW_ID)
+        .executions
+        .create({
+          parameters: {
+            name,
+            amount: requestDonationAmount,
+            platformUrl: paymentUrl,
+          }, to: phoneNumber, from: process.env.TWILIO_PHONE_NUMBER
+        })
+        .then(async response => {
+          console.log('success sending twilio!');
+        })
+        .catch(error => {
+          sendErrorToAirtable(error, name);
+          res.status(500).send(`Error sending message via Twilio. Check Twilio logs. Donor name: ${name}.`);
+          return;
+        });
+    });
 
-        const updatedRecord = await updateAirtableRecord(request.id, donationId, name);
-        const nameOfUpdatedRecord = updatedRecord.get('Name');
-
-        res.status(200).send(`Success! Message success id number: ${response.sid}. Record updated: ${request.id}, name: ${nameOfUpdatedRecord}`);
-      })
-      .catch(error => {
-        sendErrorToAirtable(error, name);
-        res.status(500).send(`Error sending message via Twilio. Check Twilio logs. Donor name: ${name}.`);
-      });
-  });
+    res.status(200).send(`Success! Message(s) sent.`);
+  } catch (e) {
+    sendErrorToAirtable(e, name);
+    res.status(500).send(`Error during the donation matching process or sending message via Twilio. Check logs. Donor name: ${name}.`);
+  }
 }
 
 module.exports = async (req, res) => {
