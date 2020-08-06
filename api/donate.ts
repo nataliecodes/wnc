@@ -325,7 +325,12 @@ const matchDonorAndSendText = async (donationRequest, res) => {
     });
   } catch (e) {
     sendErrorToAirtable(e, name);
+    res.status(500).send('Error sending to Twilio.');
   }
+
+  setTimeout(() => {
+    res.status(200).send('Worked!');
+  }, 5000);
 }
 
 module.exports = async (req, res) => {
