@@ -113,10 +113,6 @@ const getAllRequests = async (paymentMethods: PaymentMethod[], name: string): Pr
       }
     });
 
-    console.log('--- start paymentfilter ---');
-    console.log({ paymentFilter });
-    console.log('--- end paymentfilter ---');
-
     const filter = {
       filterByFormula: paymentFilter,
     };
@@ -228,12 +224,8 @@ const matchDonorAndSendText = async (donationRequest, res) => {
     return;
   }
 
-  // get an array of each ID with weight based on how much money they have left to donate
+  // get a random request from the table
   const request = await getRandomRequest(requests, name);
-
-  console.log('---start matched request---');
-  console.log({ requestPayments: request.get('Payment Method') });
-  console.log('---end matched request---');
 
   // get payment method(s) from request
   const requestPaymentMethods = request.get('Payment Method');
